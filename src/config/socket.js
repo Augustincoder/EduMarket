@@ -2,7 +2,7 @@ const { Server } = require('socket.io');
 const { createAdapter } = require('@socket.io/redis-adapter');
 const { pubClient, subClient } = require('./redis');
 const { verifyToken } = require('../utils/jwt');
-const { isBlacklisted } = require('../utils/tokenBlacklist');
+const { isTokenBlacklisted } = require('../utils/tokenBlacklist');
 const logger = require('../utils/logger');
 const prisma = require('./prisma');
 
@@ -144,7 +144,7 @@ function initSocket(httpServer) {
 
       const decoded = verifyToken(token);
 
-      if (isBlacklisted(decoded.jti)) {
+      if (await isTokenBlacklisted(token)) {
         return next(new Error('Authentication error: Session ended'));
       }
 
