@@ -1,6 +1,6 @@
 const vipService = require('./vip.service');
 const { VIP_PACKAGES } = require('./vip.packages');
-const { AppError } = require('../../middleware/errorHandler');
+const { asyncHandler } = require('../../middleware/errorHandler');
 
 /**
  * Get available VIP packages

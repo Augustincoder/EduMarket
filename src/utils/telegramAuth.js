@@ -66,7 +66,7 @@ function validateInitData(initData) {
     }
     
     return null;
-  } catch (error) {
+  } catch {
     return null;
   }
 }

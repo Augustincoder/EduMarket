@@ -86,7 +86,7 @@ const optionalAuth = asyncHandler(async (req, res, next) => {
       const userIdStr = String(decoded.userId || decoded.id);
       req.user = { ...decoded, id: userIdStr, userId: userIdStr };
     }
-  } catch (err) {
+  } catch {
     // Ignore error if token is invalid, just proceed as unauthenticated
   }
   

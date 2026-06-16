@@ -106,7 +106,7 @@ async function setUserBanStatus(adminId, targetUserId, isBanned, reason) {
       // Disconnect all active sockets for this user
       io.to(`user_${targetUserId}`).disconnectSockets(true);
       logger.info(`Banned user ${targetUserId} disconnected from all sockets.`);
-    } catch (err) {
+    } catch {
       // socket io might not be initialized in some contexts (e.g. scripts)
     }
   }

@@ -2,6 +2,7 @@ const prisma = require('../../config/prisma');
 const { AppError } = require('../../middleware/errorHandler');
 const chatService = require('./chat.service');
 const { getIO } = require('../../config/socket');
+const logger = require('../../utils/logger');
 
 /**
  * 1-BOSQICH: GURUHLAR VA A'ZOLARNI BOSHQARISH
@@ -221,7 +222,7 @@ async function removeParticipant(chatRoomId, requesterId, targetUserId) {
   try {
     const io = getIO();
     io.to(`chat_${chatRoomId}`).emit('participant_removed', { chatRoomId, userId: targetUserId });
-  } catch (err) {}
+  } catch (err) { logger.warn(`Socket emit error: ${err.message}`); }
 
   return true;
 }
@@ -260,7 +261,7 @@ async function leaveGroup(chatRoomId, userId) {
   try {
     const io = getIO();
     io.to(`chat_${chatRoomId}`).emit('participant_removed', { chatRoomId, userId });
-  } catch (err) {}
+  } catch (err) { logger.warn(`Socket emit error: ${err.message}`); }
 
   // Agar chiqib ketgan odam OWNER bo'lsa, boshqa birovga OWNER berish kerak
   if (participant.role === 'OWNER') {
@@ -511,7 +512,7 @@ async function acceptInvite(inviteId, userId) {
   }
 
   // Statusni yangilash va Participant qilib qo'shish
-  const [updatedInvite, newParticipant] = await prisma.$transaction([
+  const [, newParticipant] = await prisma.$transaction([
     prisma.chatInvite.update({
       where: { id: inviteId },
       data: { status: 'ACCEPTED', resolvedAt: new Date() }
@@ -540,7 +541,7 @@ async function acceptInvite(inviteId, userId) {
       chatRoomId: invite.chatRoomId, 
       participant: newParticipant 
     });
-  } catch (err) {}
+  } catch (err) { logger.warn(`Socket emit error: ${err.message}`); }
 
   return { chatRoomId: invite.chatRoomId };
 }
@@ -636,5 +637,9 @@ module.exports = {
   acceptInvite,
   rejectInvite,
   getMyInvites,
-  getChatRoomInfo
+  getChatRoomInfo,
+  updateParticipantRole,
+  muteParticipant,
+  banUserFromRoom,
+  updateAdvancedGroupSettings
 };

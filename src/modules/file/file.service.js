@@ -53,7 +53,7 @@ function getExtension(mimeType) {
  * @param {string} originalName - Original filename (for logging only)
  * @returns {string} R2 object key
  */
-function generateObjectKey(mimeType, originalName) {
+function generateObjectKey(mimeType, _originalName) {
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -69,12 +69,12 @@ function generateObjectKey(mimeType, originalName) {
  * Returns the R2 object key (stored in DB as the "fileId").
  *
  * @param {Buffer} buffer - File data
- * @param {string} filename - Original filename
+ * @param {string} _originalName - Original filename
  * @param {string} mimeType - File MIME type
  * @returns {string} R2 object key (e.g. "uploads/2026/06/uuid.pdf")
  */
-async function uploadFile(buffer, filename, mimeType) {
-  const objectKey = generateObjectKey(mimeType, filename);
+async function uploadFile(buffer, _originalName, mimeType) {
+  const objectKey = generateObjectKey(mimeType, _originalName);
   const isImage = mimeType.startsWith('image/');
 
   try {
@@ -89,7 +89,7 @@ async function uploadFile(buffer, filename, mimeType) {
         : 'private, max-age=3600',
       // Store original filename as metadata for display purposes
       Metadata: {
-        'original-name': encodeURIComponent(filename),
+        'original-name': encodeURIComponent(_originalName),
       },
     }));
 

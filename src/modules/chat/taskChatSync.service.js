@@ -68,7 +68,7 @@ async function syncTaskRoomParticipants(taskId) {
       try {
         const io = getIO();
         newParticipants.forEach(p => io.to(`chat_${room.id}`).emit('participant_added', { chatRoomId: room.id, participant: p }));
-      } catch (e) {}
+      } catch (err) { logger.warn(`Socket emit error: ${err.message}`); }
     }
 
     if (rolesToUpdate.length > 0) {
@@ -81,7 +81,7 @@ async function syncTaskRoomParticipants(taskId) {
         try {
           const io = getIO();
           io.to(`chat_${room.id}`).emit('participant_updated', { chatRoomId: room.id, participant: updated });
-        } catch (e) {}
+        } catch (err) { logger.warn(`Socket emit error: ${err.message}`); }
       }));
     }
 
@@ -102,7 +102,7 @@ async function syncTaskRoomParticipants(taskId) {
       try {
         const io = getIO();
         removedParticipants.forEach(p => io.to(`chat_${room.id}`).emit('participant_removed', { chatRoomId: room.id, userId: p.userId }));
-      } catch (e) {}
+      } catch (err) { logger.warn(`Socket emit error: ${err.message}`); }
     }
   } catch (err) {
     logger.error(`Failed to sync task room participants for task ${taskId}: ${err.message}`);

@@ -5,6 +5,7 @@ const { detectSpamBids } = require('../../utils/antifraud');
 const bidRepository = require('./bid.repository');
 const taskRepository = require('../task/task.repository');
 const prisma = require('../../config/prisma'); // Keep for user queries temporarily if needed
+const logger = require('../../utils/logger');
 const chatRoomService = require('../chat/chat-room.service');
 const chatService = require('../chat/chat.service');
 const taskChatSyncService = require('../chat/taskChatSync.service');
@@ -135,7 +136,7 @@ async function acceptBid(taskId, bidId, clientId) {
       const room = await chatRoomService.getOrCreateTaskRoom(clientId, taskId);
       await chatService.sendSystemEvent(room.id, "🤝 Taklif qabul qilindi! Vazifa ijrochiga biriktirildi. Ishni boshlashingiz mumkin.");
       await taskChatSyncService.syncTaskRoomParticipants(taskId);
-    } catch(e) {}
+    } catch (err) { logger.warn(`Chat/socket side-effect error: ${err.message}`); }
     
     return updatedTask;
   } catch (err) {
@@ -188,7 +189,7 @@ async function acceptCounterOffer(bidId, freelancerId) {
       const room = await chatRoomService.getOrCreateTaskRoom(freelancerId, bid.taskId);
       await chatService.sendSystemEvent(room.id, `🤝 Counter-offer qabul qilindi! Kelishilgan narx: ${bid.counterPrice} UZS. Ishni boshlashingiz mumkin.`);
       await taskChatSyncService.syncTaskRoomParticipants(bid.taskId);
-    } catch(e) {}
+    } catch (err) { logger.warn(`Chat/socket side-effect error: ${err.message}`); }
 
     return updatedTask;
   } catch (err) {
@@ -250,7 +251,7 @@ async function assembleTeam(taskId, clientId, teamMembers) {
       const room = await chatRoomService.getOrCreateTaskRoom(clientId, taskId);
       await chatService.sendSystemEvent(room.id, `👥 Jamoa yig'ildi! ${teamMembers.length} ta ijrochi vazifaga biriktirildi. Ishni boshlashingiz mumkin.`);
       await taskChatSyncService.syncTaskRoomParticipants(taskId);
-    } catch(e) {}
+    } catch (err) { logger.warn(`Chat/socket side-effect error: ${err.message}`); }
 
     return updatedTask;
   } catch (err) {

@@ -379,7 +379,7 @@ async function _triggerTaskSideEffects(taskId, nextState, userId) {
   try {
     const io = getIO();
     io.to(`task_${taskId}`).emit('task_status_changed', { taskId, newStatus: nextState });
-  } catch (err) {}
+  } catch (err) { logger.warn(`Socket emit error: ${err.message}`); }
 
   try {
     const room = await chatRoomService.getOrCreateTaskRoom(userId, taskId);

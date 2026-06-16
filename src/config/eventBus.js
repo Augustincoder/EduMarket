@@ -59,8 +59,8 @@ async function consume(streamName, groupName, consumerName, handler) {
       );
 
       if (result) {
-        const [stream, messages] = result[0];
-        for (const [id, [key, value]] of messages) {
+        const [_stream, messages] = result[0];
+        for (const [id, [_key, value]] of messages) {
           const eventData = JSON.parse(value);
           
           try {

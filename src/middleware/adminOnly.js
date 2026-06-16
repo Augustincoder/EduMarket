@@ -1,5 +1,5 @@
 const { AppError, asyncHandler } = require('./errorHandler');
-const { requireAuth } = require('./auth');
+
 
 /**
  * Middleware to restrict access to admins only.

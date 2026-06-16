@@ -1,7 +1,7 @@
 const express = require('express');
 const categoryController = require('./category.controller');
 const categorySchema = require('./category.schema');
-const authController = require('../auth/auth.controller');
+
 const { requireAuth } = require('../../middleware/auth');
 const { requireAdmin } = require('../../middleware/adminOnly');
 const { validate } = require('../../middleware/validate');

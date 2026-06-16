@@ -21,7 +21,7 @@ const chatQueue = new Queue('chat_messages', {
 });
 
 async function initWorkers() {
-  const prisma = require('./prisma');
+
   const notificationService = require('../modules/notification/notification.service');
   const { isUserOnline } = require('./socket');
 

@@ -151,7 +151,7 @@ async function getBatchUrls(req, res) {
  * SECURITY: Disabled to prevent IDOR data destruction. 
  * Files are soft-deleted via parent entities (Task, Chat, etc).
  */
-async function deleteFile(req, res) {
+async function deleteFile(_req, _res) {
   throw new AppError('Fayllarni to\'g\'ridan-to\'g\'ri o\'chirish xavfsizlik sababli taqiqlangan.', 403);
 }
 

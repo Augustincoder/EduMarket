@@ -1,8 +1,7 @@
 const prisma = require('../../config/prisma');
 const { AppError } = require('../../middleware/errorHandler');
-const { getIO, isUserOnline, getOnlineUsersSet } = require('../../config/socket');
+const { getIO, getOnlineUsersSet } = require('../../config/socket');
 const logger = require('../../utils/logger');
-const notificationService = require('../notification/notification.service');
 const { chatQueue } = require('../../config/queue');
 
 /**
@@ -51,15 +50,13 @@ async function sendMessage(chatRoomId, senderId, data) {
   }
 
   // Fetch replyTo if exists
-  let replyTo = null;
   if (data.replyToId) {
-    replyTo = await prisma.chatMessage.findUnique({
+    const _replyTo = await prisma.chatMessage.findUnique({
       where: { id: data.replyToId },
       select: { id: true, chatRoomId: true, content: true, fileType: true, sender: { select: { fullname: true } } }
     });
 
-    if (!replyTo || replyTo.chatRoomId !== chatRoomId) {
-      replyTo = null;
+    if (!_replyTo || _replyTo.chatRoomId !== chatRoomId) {
       data.replyToId = null;
     }
   }
@@ -98,7 +95,12 @@ async function sendMessage(chatRoomId, senderId, data) {
     logger.error(`Failed to fetch participants: ${err.message}`);
   }
 
-  // 2. Emit to Socket immediately for real-time feel
+  // 2. Attach clientId to help frontend deduplicate optimistic messages
+  if (data.clientId) {
+    message.clientId = data.clientId;
+  }
+
+  // 3. Emit to Socket immediately for real-time feel
   try {
     const io = getIO();
     const roomName = `chat_${chatRoomId}`;
@@ -115,7 +117,7 @@ async function sendMessage(chatRoomId, senderId, data) {
     logger.error(`Socket emit failed: ${err.message}`);
   }
 
-  // 3. Add side-effects to BullMQ (Offline Notifications, analytics, etc)
+  // 4. Add side-effects to BullMQ (Offline Notifications, analytics, etc)
   try {
     await chatQueue.add('process_message_side_effects', {
       messageId: message.id,
@@ -144,11 +146,30 @@ async function sendSystemEvent(chatRoomId, content, metadata = null) {
     }
   });
 
-  // 2. Emit to Socket
+  // 2. Fetch participants to ensure global delivery
+  let participants = [];
+  try {
+    participants = await prisma.chatParticipant.findMany({
+      where: { chatRoomId },
+      select: { userId: true }
+    });
+  } catch (err) {
+    logger.error(`Failed to fetch participants for system event: ${err.message}`);
+  }
+
+  // 3. Emit to Socket
   try {
     const io = getIO();
-    io.to(`chat_${chatRoomId}`).emit('new_message', message);
-  } catch (err) {}
+    const roomName = `chat_${chatRoomId}`;
+    
+    // Emit to active chat room
+    io.to(roomName).emit('new_message', message);
+    
+    // Emit to personal rooms for background/sidebar updates
+    participants.forEach(p => {
+      io.to(`user_${p.userId}`).emit('new_message', message);
+    });
+  } catch (err) { logger.warn(`Socket emit error: ${err.message}`); }
 
   // System events usually don't need offline push notifications
   return message;
@@ -186,7 +207,7 @@ async function pinMessage(chatRoomId, requesterId, messageId) {
   try {
     const io = getIO();
     io.to(`chat_${chatRoomId}`).emit('message_pinned', { chatRoomId, message: room.pinnedMsg });
-  } catch (err) {}
+  } catch (err) { logger.warn(`Socket emit error: ${err.message}`); }
 
   // Tizim xabari ham tashlab qoyamiz
   await sendSystemEvent(chatRoomId, eventText);
@@ -356,7 +377,7 @@ async function editMessage(messageId, userId, newContent) {
   try {
     const io = getIO();
     io.to(`chat_${message.chatRoomId}`).emit('message_edited', updatedMessage);
-  } catch (err) {}
+  } catch (err) { logger.warn(`Socket emit error: ${err.message}`); }
 
   return updatedMessage;
 }
@@ -386,7 +407,7 @@ async function deleteMessage(messageId, userId) {
   try {
     const io = getIO();
     io.to(`chat_${message.chatRoomId}`).emit('message_deleted', { messageId, chatRoomId: message.chatRoomId });
-  } catch (err) {}
+  } catch (err) { logger.warn(`Socket emit error: ${err.message}`); }
 
   return deletedMessage;
 }
@@ -435,7 +456,7 @@ async function toggleReaction(messageId, userId, icon) {
       chatRoomId: message.chatRoomId, 
       reactions: allReactions 
     });
-  } catch (err) {}
+  } catch (err) { logger.warn(`Socket emit error: ${err.message}`); }
 
   return { messageId, reactions: allReactions };
 }
@@ -476,7 +497,7 @@ async function markAsRead(chatRoomId, userId) {
         lastReadMessageId: lastMessage.id,
         readAt: now
       });
-    } catch (err) {}
+    } catch (err) { logger.warn(`Socket emit error: ${err.message}`); }
   }
 
   return { success: true };
