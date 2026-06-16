@@ -11,7 +11,7 @@ function initFirebase() {
     // We expect service account details in env or a JSON file
     // For safety in this environment, we'll try to parse from individual env vars
     const serviceAccount = {
-      projectId: process.env.VITE_FIREBASE_PROJECT_ID,
+      projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
       // Replace escaped newlines in the private key
       privateKey: process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined,

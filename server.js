@@ -107,6 +107,8 @@ async function start() {
     const httpServer = http.createServer(app);
 
     // Attach Socket.io to HTTP Server
+    // IMPORTANT: initSocket is called AFTER connectRedis so the Redis adapter
+    // is guaranteed to be set up with open pub/sub clients
     initSocket(httpServer);
 
     const server = httpServer.listen(env.PORT, () => {

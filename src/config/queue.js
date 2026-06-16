@@ -3,8 +3,11 @@ const Redis = require('ioredis');
 const env = require('./env');
 const logger = require('../utils/logger');
 
+const isRedisTls = env.REDIS_URL && env.REDIS_URL.startsWith('rediss://');
+
 const connection = new Redis(env.REDIS_URL, {
   maxRetriesPerRequest: null,
+  ...(isRedisTls ? { tls: { rejectUnauthorized: false } } : {}),
 });
 
 const chatQueue = new Queue('chat_messages', { 

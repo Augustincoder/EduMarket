@@ -94,9 +94,9 @@ async function isUserOnline(userId) {
 
 /**
  * Initialize Socket.io Server and attach to HTTP server
+ * MUST be called AFTER connectRedis() so pubClient/subClient are open
  */
 function initSocket(httpServer) {
-  // Import env config inside initSocket or define it above
   const env = require('../config/env');
   const ALWAYS_ALLOWED = [
     'https://web.telegram.org',
@@ -115,36 +115,39 @@ function initSocket(httpServer) {
       origin: allowedOrigins,
       methods: ['GET', 'POST'],
       credentials: true
-    }
+    },
+    // Allow both transports — Render supports websockets
+    transports: ['websocket', 'polling'],
+    // Ping/pong to detect dead connections fast
+    pingInterval: 25000,
+    pingTimeout: 20000,
   });
 
-  // Attach Redis adapter for cluster/multi-instance scale if connected
+  // ─── Redis Adapter ───────────────────────────────────────────────────────────
+  // Since initSocket is called after connectRedis(), clients should be open.
+  // If Redis is not available we fall back gracefully to memory adapter.
   if (pubClient.isOpen && subClient.isOpen) {
     io.adapter(createAdapter(pubClient, subClient));
-    // No blind delete of 'online_users' to support multi-instance scale
+    logger.info('Socket.io Redis adapter ulandi (multi-instance sync faol)');
   } else {
-    logger.warn('Redis is not connected. Socket.io will use memory adapter.');
+    logger.warn('Redis ulanmagan. Socket.io xotira adapteri bilan ishlaydi (single-instance only).');
   }
 
-  // Middleware for Authentication
+  // ─── Middleware: Authentication ──────────────────────────────────────────────
   io.use(async (socket, next) => {
     try {
-      // 1. Get token from handshake auth or query
       const token = socket.handshake.auth?.token || socket.handshake.query?.token;
       
       if (!token) {
         return next(new Error('Authentication error: No token provided'));
       }
 
-      // 2. Verify Token
       const decoded = verifyToken(token);
 
-      // 3. Check Blacklist
       if (isBlacklisted(decoded.jti)) {
         return next(new Error('Authentication error: Session ended'));
       }
 
-      // 4. Verify User
       const userIdStr = String(decoded.userId);
       const user = await prisma.user.findUnique({
         where: { id: userIdStr },
@@ -154,7 +157,6 @@ function initSocket(httpServer) {
       if (!user) return next(new Error('Authentication error: User not found'));
       if (user.isBanned) return next(new Error('Authentication error: User banned'));
 
-      // Attach user object to socket for later use
       socket.user = { ...decoded, userId: userIdStr };
       next();
     } catch (err) {
@@ -162,22 +164,23 @@ function initSocket(httpServer) {
     }
   });
 
-  // Connection Handler
+  // ─── Connection Handler ──────────────────────────────────────────────────────
   io.on('connection', (socket) => {
     const userId = socket.user.userId;
-    logger.info(`Socket connected: ${socket.id} (User: ${userId})`);
+    logger.info(`Socket ulandi: ${socket.id} (Foydalanuvchi: ${userId})`);
 
     // Join personal notification/event room
     socket.join(`user_${userId}`);
 
     // Track connection status
-    handleUserConnect(userId, socket.id).catch(err => logger.error(`Error handling connect presence: ${err.message}`));
+    handleUserConnect(userId, socket.id).catch(err =>
+      logger.error(`Ulanish holati xatosi: ${err.message}`)
+    );
 
-    // Client requests to join a chat room
+    // ─── join_chat_room ────────────────────────────────────────────────────────
     socket.on('join_chat_room', async (chatRoomId) => {
       if (!chatRoomId || typeof chatRoomId !== 'string') return;
       try {
-        // Validate that user belongs to this chat room
         const participant = await prisma.chatParticipant.findUnique({
           where: { chatRoomId_userId: { chatRoomId, userId: socket.user.userId } }
         });
@@ -191,43 +194,63 @@ function initSocket(httpServer) {
         socket.join(roomName);
         if (!socket.data.rooms) socket.data.rooms = new Set();
         socket.data.rooms.add(chatRoomId);
-        logger.debug(`User ${socket.user.userId} joined room ${roomName}`);
+        logger.debug(`Foydalanuvchi ${socket.user.userId} chat_${chatRoomId} xonasiga qo'shildi`);
       } catch (err) {
-        logger.error(`join_chat_room error for user ${socket.user.userId}: ${err.message}`);
+        logger.error(`join_chat_room xatosi (${socket.user.userId}): ${err.message}`);
       }
     });
 
+    // ─── leave_chat_room ───────────────────────────────────────────────────────
     socket.on('leave_chat_room', (chatRoomId) => {
       if (!chatRoomId || typeof chatRoomId !== 'string') return;
       const roomName = `chat_${chatRoomId}`;
       socket.leave(roomName);
       if (socket.data.rooms) socket.data.rooms.delete(chatRoomId);
-      logger.debug(`User ${socket.user.userId} left room ${roomName}`);
+      logger.debug(`Foydalanuvchi ${socket.user.userId} chat_${chatRoomId} xonasidan chiqdi`);
     });
 
-    socket.on('typing', ({ chatRoomId }) => {
+    // ─── typing ───────────────────────────────────────────────────────────────
+    // FIX: Removed strict room membership check — user may not have called join_chat_room
+    // yet (e.g., after reconnect) but they're still a valid participant.
+    // Instead we do a lightweight DB check only if not in room set.
+    socket.on('typing', async ({ chatRoomId }) => {
       if (!chatRoomId || typeof chatRoomId !== 'string') return;
 
-      // Check if user joined the room (cached validation)
-      if (!socket.data.rooms || !socket.data.rooms.has(chatRoomId)) return;
+      // Fast path: user already in room set
+      if (socket.data.rooms && socket.data.rooms.has(chatRoomId)) {
+        socket.to(`chat_${chatRoomId}`).emit('user_typing', { chatRoomId, userId: socket.user.userId });
+        return;
+      }
 
-      const roomName = `chat_${chatRoomId}`;
-      // Broadcast to everyone in the room except the sender
-      socket.to(roomName).emit('user_typing', { chatRoomId, userId: socket.user.userId });
+      // Slow path: verify participation in DB then auto-join
+      try {
+        const participant = await prisma.chatParticipant.findUnique({
+          where: { chatRoomId_userId: { chatRoomId, userId: socket.user.userId } }
+        });
+        if (!participant) return;
+
+        // Auto-join for future events
+        socket.join(`chat_${chatRoomId}`);
+        if (!socket.data.rooms) socket.data.rooms = new Set();
+        socket.data.rooms.add(chatRoomId);
+
+        socket.to(`chat_${chatRoomId}`).emit('user_typing', { chatRoomId, userId: socket.user.userId });
+      } catch (err) {
+        logger.error(`typing check xatosi: ${err.message}`);
+      }
     });
 
+    // ─── subscribe_presence ───────────────────────────────────────────────────
     socket.on('subscribe_presence', async (userIds) => {
       if (!Array.isArray(userIds) || userIds.length === 0) return;
 
       try {
-        // Optimization: Find all common chat rooms for the requester
         const myRooms = await prisma.chatParticipant.findMany({
           where: { userId: socket.user.userId },
           select: { chatRoomId: true }
         });
         const myRoomIds = myRooms.map(r => r.chatRoomId);
 
-        // Find which of the requested users share at least one of these rooms
         const allowedPartners = await prisma.chatParticipant.findMany({
           where: {
             chatRoomId: { in: myRoomIds },
@@ -242,10 +265,11 @@ function initSocket(httpServer) {
           socket.join(`presence_${id}`);
         });
       } catch (err) {
-        logger.error(`Error in subscribe_presence: ${err.message}`);
+        logger.error(`subscribe_presence xatosi: ${err.message}`);
       }
     });
 
+    // ─── unsubscribe_presence ─────────────────────────────────────────────────
     socket.on('unsubscribe_presence', (userIds) => {
       if (!Array.isArray(userIds)) return;
       userIds.forEach(id => {
@@ -253,9 +277,12 @@ function initSocket(httpServer) {
       });
     });
 
-    socket.on('disconnect', () => {
-      logger.info(`Socket disconnected: ${socket.id}`);
-      handleUserDisconnect(userId, socket.id).catch(err => logger.error(`Error handling disconnect presence: ${err.message}`));
+    // ─── disconnect ───────────────────────────────────────────────────────────
+    socket.on('disconnect', (reason) => {
+      logger.info(`Socket uzildi: ${socket.id} (sabab: ${reason})`);
+      handleUserDisconnect(userId, socket.id).catch(err =>
+        logger.error(`Uzilish holati xatosi: ${err.message}`)
+      );
     });
   });
 
@@ -267,7 +294,7 @@ function initSocket(httpServer) {
  */
 function getIO() {
   if (!io) {
-    throw new Error('Socket.io has not been initialized!');
+    throw new Error('Socket.io ishga tushurilmagan!');
   }
   return io;
 }
@@ -283,7 +310,7 @@ async function getOnlineUsersSet() {
       const members = await pubClient.sMembers('online_users');
       members.forEach(id => onlineUsers.add(id));
     } catch (err) {
-      logger.error(`Redis getOnlineUsersSet error: ${err.message}`);
+      logger.error(`Redis getOnlineUsersSet xatosi: ${err.message}`);
     }
   } else {
     for (const userId of localConnections.keys()) {
