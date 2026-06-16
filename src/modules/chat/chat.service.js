@@ -340,6 +340,7 @@ async function getConversations(userId) {
       if (otherParticipant) {
         avatar = otherParticipant.user.avatarUrl;
         otherUser = otherParticipant.user;
+        otherUser.isOnline = onlineUsers.has(otherUser.id);
       }
     }
 
