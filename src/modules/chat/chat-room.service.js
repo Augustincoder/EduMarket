@@ -1,5 +1,7 @@
 const prisma = require('../../config/prisma');
 const { AppError } = require('../../middleware/errorHandler');
+const chatService = require('./chat.service');
+const { getIO } = require('../../config/socket');
 
 /**
  * 1-BOSQICH: GURUHLAR VA A'ZOLARNI BOSHQARISH
@@ -353,7 +355,9 @@ async function banUserFromRoom(chatRoomId, requesterId, targetUserId) {
       if (target.role === 'OWNER') throw new AppError('Guruh yaratuvchisini ban qilib bo\'lmaydi', 403);
       await prisma.chatParticipant.delete({ where: { id: target.id } });
     }
-  } catch (e) {}
+  } catch (e) {
+    if (e instanceof AppError) throw e;
+  }
 
   // bannedUserIds ro'yxatiga qo'shamiz
   const bannedUserIds = room.bannedUserIds || [];
@@ -581,41 +585,37 @@ async function getChatRoomInfo(chatRoomId, userId) {
 
   if (!participant) throw new AppError('Siz ushbu guruh a\'zosi emassiz', 403);
 
-  // Ishtirokchilar
-  const participants = await prisma.chatParticipant.findMany({
-    where: { chatRoomId },
-    include: {
-      user: {
-        select: { id: true, fullname: true, username: true, avatarUrl: true }
-      }
-    },
-    orderBy: { joinedAt: 'asc' }
-  });
-
-  // Guruh haqida ma'lumot
-  const room = await prisma.chatRoom.findUnique({
-    where: { id: chatRoomId },
-    select: { id: true, name: true, avatarUrl: true, type: true, createdAt: true }
-  });
-
-  // Media fayllarni olish (Rasmlar, Videolar, Hujjatlar)
-  const mediaFiles = await prisma.chatMessage.findMany({
-    where: {
-      chatRoomId,
-      fileId: { not: null },
-      isDeleted: false
-    },
-    select: {
-      id: true,
-      fileId: true,
-      fileType: true,
-      fileName: true,
-      isSecureFile: true,
-      createdAt: true
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 50 // Limit 50 for now
-  });
+  // Parallel fetch: Participants, Room Info, and Media Files
+  const [participants, room, mediaFiles] = await Promise.all([
+    prisma.chatParticipant.findMany({
+      where: { chatRoomId },
+      include: {
+        user: { select: { id: true, fullname: true, username: true, avatarUrl: true } }
+      },
+      orderBy: { joinedAt: 'asc' }
+    }),
+    prisma.chatRoom.findUnique({
+      where: { id: chatRoomId },
+      select: { id: true, name: true, avatarUrl: true, type: true, createdAt: true }
+    }),
+    prisma.chatMessage.findMany({
+      where: {
+        chatRoomId,
+        fileId: { not: null },
+        isDeleted: false
+      },
+      select: {
+        id: true,
+        fileId: true,
+        fileType: true,
+        fileName: true,
+        isSecureFile: true,
+        createdAt: true
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20
+    })
+  ]);
 
   return {
     room,

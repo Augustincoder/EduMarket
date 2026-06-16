@@ -87,6 +87,17 @@ async function sendMessage(chatRoomId, senderId, data) {
     }
   });
 
+  // Fetch participants once to avoid double DB queries
+  let participants = [];
+  try {
+    participants = await prisma.chatParticipant.findMany({
+      where: { chatRoomId },
+      select: { userId: true }
+    });
+  } catch (err) {
+    logger.error(`Failed to fetch participants: ${err.message}`);
+  }
+
   // 2. Emit to Socket immediately for real-time feel
   try {
     const io = getIO();
@@ -96,11 +107,6 @@ async function sendMessage(chatRoomId, senderId, data) {
     io.to(roomName).emit('new_message', message);
     
     // Emit to each participant's personal room for sidebar/notification updates
-    const participants = await prisma.chatParticipant.findMany({
-      where: { chatRoomId },
-      select: { userId: true }
-    });
-
     participants.forEach(p => {
       io.to(`user_${p.userId}`).emit('new_message', message);
     });
@@ -111,14 +117,6 @@ async function sendMessage(chatRoomId, senderId, data) {
 
   // 3. Add side-effects to BullMQ (Offline Notifications, analytics, etc)
   try {
-    // We already have participants from the socket emit logic above, 
-    // but we'll fetch them again if needed or pass them down.
-    // For simplicity and to avoid race conditions, we'll just use the already fetched participants.
-    const participants = await prisma.chatParticipant.findMany({
-      where: { chatRoomId },
-      select: { userId: true }
-    });
-    
     await chatQueue.add('process_message_side_effects', {
       messageId: message.id,
       participants,

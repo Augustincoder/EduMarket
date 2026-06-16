@@ -41,53 +41,68 @@ async function syncTaskRoomParticipants(taskId) {
     });
 
     // 1. Add missing participants
+    const toAdd = [];
+    const rolesToUpdate = [];
+
     for (const [userId, role] of desired) {
       const isAlreadyIn = currentParticipants.find(p => p.userId === userId);
       if (!isAlreadyIn) {
-        const p = await prisma.chatParticipant.create({
-          data: { chatRoomId: room.id, userId, role },
-          include: { user: { select: { id: true, fullname: true, username: true, avatarUrl: true } } }
-        });
-        await chatService.sendSystemEvent(room.id, `👋 ${p.user.fullname} guruhga qo'shildi.`);
-
-        // Emit event to update UI in real-time
-        try {
-          const io = getIO();
-          io.to(`chat_${room.id}`).emit('participant_added', { chatRoomId: room.id, participant: p });
-        } catch (e) {}
+        toAdd.push({ chatRoomId: room.id, userId, role });
       } else if (isAlreadyIn.role !== role) {
-        // Update role if needed (e.g. if someone becomes lead freelancer)
+        rolesToUpdate.push({ id: isAlreadyIn.id, role });
+      }
+    }
+
+    if (toAdd.length > 0) {
+      await prisma.chatParticipant.createMany({ data: toAdd });
+      
+      const addedUserIds = toAdd.map(a => a.userId);
+      const newParticipants = await prisma.chatParticipant.findMany({
+        where: { chatRoomId: room.id, userId: { in: addedUserIds } },
+        include: { user: { select: { id: true, fullname: true, username: true, avatarUrl: true } } }
+      });
+      
+      const names = newParticipants.map(p => p.user.fullname).join(', ');
+      await chatService.sendSystemEvent(room.id, `👋 ${names} guruhga qo'shildi.`);
+
+      try {
+        const io = getIO();
+        newParticipants.forEach(p => io.to(`chat_${room.id}`).emit('participant_added', { chatRoomId: room.id, participant: p }));
+      } catch (e) {}
+    }
+
+    if (rolesToUpdate.length > 0) {
+      await Promise.all(rolesToUpdate.map(async (ru) => {
         const updated = await prisma.chatParticipant.update({
-          where: { id: isAlreadyIn.id },
-          data: { role },
+          where: { id: ru.id },
+          data: { role: ru.role },
           include: { user: { select: { id: true, fullname: true, username: true, avatarUrl: true } } }
         });
-
-        // Emit for role change
         try {
           const io = getIO();
           io.to(`chat_${room.id}`).emit('participant_updated', { chatRoomId: room.id, participant: updated });
         } catch (e) {}
-      }
+      }));
     }
 
     // 2. Remove participants who are no longer part of the task
+    const toRemoveIds = [];
     for (const p of currentParticipants) {
       if (!desired.has(p.userId)) {
-        const participantWithUser = await prisma.chatParticipant.findUnique({
-          where: { id: p.id },
-          include: { user: { select: { fullname: true } } }
-        });
-
-        await prisma.chatParticipant.delete({ where: { id: p.id } });
-        await chatService.sendSystemEvent(room.id, `👋 ${participantWithUser?.user?.fullname || 'Foydalanuvchi'} guruhdan chiqarildi (vazifa tarkibi o'zgardi).`);
-
-        // Emit event for real-time UI
-        try {
-          const io = getIO();
-          io.to(`chat_${room.id}`).emit('participant_removed', { chatRoomId: room.id, userId: p.userId });
-        } catch (e) {}
+        toRemoveIds.push(p.id);
       }
+    }
+
+    if (toRemoveIds.length > 0) {
+      const removedParticipants = currentParticipants.filter(p => toRemoveIds.includes(p.id));
+      await prisma.chatParticipant.deleteMany({ where: { id: { in: toRemoveIds } } });
+      
+      await chatService.sendSystemEvent(room.id, `👋 ${toRemoveIds.length} ta a'zo guruhdan chiqarildi (vazifa tarkibi o'zgardi).`);
+
+      try {
+        const io = getIO();
+        removedParticipants.forEach(p => io.to(`chat_${room.id}`).emit('participant_removed', { chatRoomId: room.id, userId: p.userId }));
+      } catch (e) {}
     }
   } catch (err) {
     logger.error(`Failed to sync task room participants for task ${taskId}: ${err.message}`);

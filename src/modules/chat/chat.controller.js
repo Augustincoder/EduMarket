@@ -72,11 +72,7 @@ async function getMyInvites(req, res) {
 async function acceptInvite(req, res) {
   const { inviteId } = req.params;
   const userId = req.user.id;
-  const result = await chatRoomService.acceptInvite(inviteId, userId);
-  
-  if (result && result.chatRoomId) {
-    await chatService.sendSystemEvent(result.chatRoomId, `${req.user.fullname || 'Yangi foydalanuvchi'} guruhga qo'shildi.`);
-  }
+  await chatRoomService.acceptInvite(inviteId, userId);
 
   res.json({ success: true, data: null });
 }

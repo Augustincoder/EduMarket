@@ -175,35 +175,41 @@ function initSocket(httpServer) {
 
     // Client requests to join a chat room
     socket.on('join_chat_room', async (chatRoomId) => {
-      // Validate that user belongs to this chat room
-      const participant = await prisma.chatParticipant.findUnique({
-        where: { chatRoomId_userId: { chatRoomId, userId: socket.user.userId } }
-      });
+      if (!chatRoomId || typeof chatRoomId !== 'string') return;
+      try {
+        // Validate that user belongs to this chat room
+        const participant = await prisma.chatParticipant.findUnique({
+          where: { chatRoomId_userId: { chatRoomId, userId: socket.user.userId } }
+        });
 
-      if (!participant) {
-        socket.emit('error', 'Bu chatga kirish ruxsati yo\'q');
-        return;
+        if (!participant) {
+          socket.emit('error', 'Bu chatga kirish ruxsati yo\'q');
+          return;
+        }
+
+        const roomName = `chat_${chatRoomId}`;
+        socket.join(roomName);
+        if (!socket.data.rooms) socket.data.rooms = new Set();
+        socket.data.rooms.add(chatRoomId);
+        logger.debug(`User ${socket.user.userId} joined room ${roomName}`);
+      } catch (err) {
+        logger.error(`join_chat_room error for user ${socket.user.userId}: ${err.message}`);
       }
-
-      const roomName = `chat_${chatRoomId}`;
-      socket.join(roomName);
-      logger.debug(`User ${socket.user.userId} joined room ${roomName}`);
     });
 
     socket.on('leave_chat_room', (chatRoomId) => {
+      if (!chatRoomId || typeof chatRoomId !== 'string') return;
       const roomName = `chat_${chatRoomId}`;
       socket.leave(roomName);
+      if (socket.data.rooms) socket.data.rooms.delete(chatRoomId);
       logger.debug(`User ${socket.user.userId} left room ${roomName}`);
     });
 
-    socket.on('typing', async ({ chatRoomId }) => {
-      if (!chatRoomId) return;
+    socket.on('typing', ({ chatRoomId }) => {
+      if (!chatRoomId || typeof chatRoomId !== 'string') return;
 
-      // Check if user is participant
-      const participant = await prisma.chatParticipant.findUnique({
-        where: { chatRoomId_userId: { chatRoomId, userId: socket.user.userId } }
-      });
-      if (!participant) return;
+      // Check if user joined the room (cached validation)
+      if (!socket.data.rooms || !socket.data.rooms.has(chatRoomId)) return;
 
       const roomName = `chat_${chatRoomId}`;
       // Broadcast to everyone in the room except the sender

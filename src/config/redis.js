@@ -13,7 +13,7 @@ async function connectRedis() {
       pubClient.connect(),
       subClient.connect()
     ]);
-    logger.info(`Redis pub/sub clients ulangan (${REDIS_URL})`);
+    logger.info(`Redis pub/sub clients ulangan (${env.REDIS_URL})`);
   } catch (err) {
     logger.error(`Redis ulanishida xatolik: ${err.message}`);
     // Non-fatal if Redis is down, but socket.io won't sync across instances
