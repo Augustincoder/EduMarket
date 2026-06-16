@@ -92,7 +92,7 @@ async function notifyNewBid(taskClientId, freelancerName, bidAmount, taskId) {
 
   const client = await prisma.user.findUnique({ where: { id: taskClientId }, select: { telegramId: true } });
   if (!client) return;
-  const keyboard = [[{ text: "Vazifani ko'rish", web_app: { url: `https://t.me/${env.BOT_USERNAME}/app?startapp=task_${taskId}` } }]];
+  const keyboard = [[{ text: "Vazifani ko'rish", url: `https://t.me/${env.BOT_USERNAME}/app?startapp=task_${taskId}` }]];
 
   await sendTelegramMessage(client.telegramId.toString(), text, keyboard);
   
@@ -112,7 +112,7 @@ async function notifyTaskAssigned(freelancerId, taskTitle, taskId) {
 
   const freelancer = await prisma.user.findUnique({ where: { id: freelancerId }, select: { telegramId: true } });
   if (!freelancer) return;
-  const keyboard = [[{ text: "Vazifani ko'rish", web_app: { url: `https://t.me/${env.BOT_USERNAME}/app?startapp=task_${taskId}` } }]];
+  const keyboard = [[{ text: "Vazifani ko'rish", url: `https://t.me/${env.BOT_USERNAME}/app?startapp=task_${taskId}` }]];
 
   await sendTelegramMessage(freelancer.telegramId.toString(), text, keyboard);
 
@@ -132,7 +132,7 @@ async function notifyChatMessage(recipientId, senderName, chatRoomId) {
 
   const recipient = await prisma.user.findUnique({ where: { id: recipientId }, select: { telegramId: true } });
   if (!recipient) return;
-  const keyboard = [[{ text: "Chatni ochish", web_app: { url: `https://t.me/${env.BOT_USERNAME}/app?startapp=chat_${chatRoomId}` } }]];
+  const keyboard = [[{ text: "Chatni ochish", url: `https://t.me/${env.BOT_USERNAME}/app?startapp=chat_${chatRoomId}` }]];
 
   await sendTelegramMessage(recipient.telegramId.toString(), text, keyboard);
 
@@ -178,7 +178,7 @@ async function notifyChatMessageBulk(recipientIds, senderName, chatRoomId) {
     select: { id: true, telegramId: true, pushToken: true, notifPrefs: true }
   });
 
-  const keyboard = [[{ text: "Chatni ochish", web_app: { url: `https://t.me/${env.BOT_USERNAME}/app?startapp=chat_${chatRoomId}` } }]];
+  const keyboard = [[{ text: "Chatni ochish", url: `https://t.me/${env.BOT_USERNAME}/app?startapp=chat_${chatRoomId}` }]];
 
   // 3. Send Telegram and Push in parallel chunks
   const chunkSize = 10;
@@ -210,7 +210,7 @@ async function notifyDeadlineApproaching(freelancerId, taskTitle, taskId) {
 
   const freelancer = await prisma.user.findUnique({ where: { id: freelancerId }, select: { telegramId: true } });
   if (!freelancer) return;
-  const keyboard = [[{ text: "Vazifani ko'rish", web_app: { url: `https://t.me/${env.BOT_USERNAME}/app?startapp=task_${taskId}` } }]];
+  const keyboard = [[{ text: "Vazifani ko'rish", url: `https://t.me/${env.BOT_USERNAME}/app?startapp=task_${taskId}` }]];
 
   await sendTelegramMessage(freelancer.telegramId.toString(), text, keyboard);
 
@@ -324,7 +324,7 @@ async function revisionRequested(task, note) {
 
 async function smartMatchNotify(freelancer, task) {
   const text = `🎯 <b>Sizga mos yangi ish chiqdi!</b>\n\n<b>"${task.title}"</b>\nKategoriya: ${task.category}\nNarx: ${task.priceMin} - ${task.priceMax} so'm\n\nVIP mutaxassis bo'lganingiz uchun sizga ushbu xabar hammadan oldin yuborildi. Darhol taklif qoldiring!`;
-  const keyboard = [[{ text: "Vazifani ko'rish", web_app: { url: `https://t.me/${env.BOT_USERNAME}/app?startapp=task_${task.id}` } }]];
+  const keyboard = [[{ text: "Vazifani ko'rish", url: `https://t.me/${env.BOT_USERNAME}/app?startapp=task_${task.id}` }]];
   await sendTelegramMessage(freelancer.telegramId.toString(), text, keyboard);
 }
 
