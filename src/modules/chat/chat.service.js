@@ -235,7 +235,7 @@ async function getMessages(chatRoomId, userId, cursor, limit = 50) {
           id: { lt: cursorId }
         }
       ];
-    } catch (e) {
+    } catch {
       logger.error(`Invalid cursor format: ${cursor}`);
     }
   }

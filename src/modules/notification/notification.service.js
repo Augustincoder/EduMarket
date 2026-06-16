@@ -254,9 +254,8 @@ async function autoCompleted(task) {
   }
 }
 
-async function disputeOpened(task, dispute) {
+async function disputeOpened(task, _dispute) {
   const msgClient = `⚠️ <b>Nizo ochildi</b>\n\n<b>"${task.title}"</b> vazifasi bo'yicha nizo ochildi. Admin tez orada ko'rib chiqadi.`;
-  const _msgAdmin = `🚨 <b>Yangi nizo!</b>\n\nVazifa ID: ${task.id}\nOchuvchi ID: ${dispute.openedByUserId}\nSabab: ${dispute.reason}`;
 
   if (task.client) {
     await createDbNotification(task.client.id, 'dispute', "Nizo ochildi", msgClient.replace(/<[^>]*>?/gm, ''), `/tasks/${task.id}`);

@@ -250,7 +250,7 @@ async function streamSecureFile(token, res) {
   let decoded;
   try {
     decoded = jwt.verify(token, env.JWT_SECRET);
-  } catch (err) {
+  } catch {
     throw new AppError('Token yaroqsiz yoki muddati o\'tgan', 403);
   }
 
