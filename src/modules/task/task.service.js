@@ -16,6 +16,15 @@ async function createTask(clientId, data) {
   // Phase 14: Calculate rush fee if urgent (e.g. 20% premium logic could go here)
   const rushFee = data.isUrgent ? Math.floor(data.priceMin * 0.2) : 0;
   
+  let maxCollaborators = data.maxCollaborators || 1;
+  if (data.isCoWorking) {
+    if (!Number.isInteger(maxCollaborators) || maxCollaborators < 2 || maxCollaborators > 10) {
+      throw new AppError('Jamoa a\'zolari soni 2 dan 10 gacha bo\'lgan butun son bo\'lishi kerak', 400);
+    }
+  } else {
+    maxCollaborators = 1;
+  }
+
   const task = await taskRepository.create({
     data: {
       clientId,
@@ -31,7 +40,7 @@ async function createTask(clientId, data) {
       rushFee,
       metadata: data.metadata || null,
       isCoWorking: data.isCoWorking || false,
-      maxCollaborators: data.maxCollaborators || 1,
+      maxCollaborators: maxCollaborators,
       paymentSplitType: data.paymentSplitType || 'EQUAL'
     }
   });
@@ -524,9 +533,17 @@ async function approvePreview(taskId, clientId) {
       data: { clientAcceptedAt: new Date() }
     });
 
-    const updatedTask = await tx.task.update({
+    const updateResult = await tx.task.updateMany({
+      where: { id: taskId, status: task.status },
+      data: { status: TASK_STATUS.IN_REVIEW, inReviewAt: new Date() }
+    });
+
+    if (updateResult.count === 0) {
+      throw new AppError('Vazifa holati allaqachon o\'zgargan. Iltimos sahifani yangilang.', 409);
+    }
+
+    const updatedTask = await tx.task.findUnique({
       where: { id: taskId },
-      data: { status: TASK_STATUS.IN_REVIEW, inReviewAt: new Date() },
       include: { client: true, freelancer: true, delivery: true }
     });
 
@@ -644,6 +661,11 @@ async function acceptDelivery(taskId, clientId) {
         if (!payout.freelancer || payout.amount <= 0) continue;
 
         // Escrow Release
+        await tx.user.update({
+          where: { id: payout.freelancer.id },
+          data: { balance: { increment: payout.amount } }
+        });
+
         await tx.transactionLog.create({
           data: {
             userId: payout.freelancer.id,

@@ -31,6 +31,9 @@ async function createBid(taskId, freelancerId, data) {
   if (data.proposedPrice > task.priceMax) {
     throw new AppError(`Maksimal byudjet ${task.priceMax} so'm`, 400);
   }
+  if (data.proposedPrice <= 0) {
+    throw new AppError("Taklif qilinayotgan narx noldan katta bo'lishi kerak", 400);
+  }
 
   // Anti-fraud spam check
   const isSpam = await detectSpamBids(freelancerId);
@@ -150,6 +153,10 @@ async function createCounterOffer(bidId, clientId, data) {
   if (bid.task.clientId !== clientId) throw new AppError('Ruxsat yo\'q', 403);
   if (bid.task.status !== TASK_STATUS.OPEN) throw new AppError('Vazifa ochiq emas', 400);
 
+  if (data.counterPrice !== undefined && data.counterPrice <= 0) {
+    throw new AppError("Narx noldan katta bo'lishi kerak", 400);
+  }
+
   return bidRepository.update(bidId, {
     counterPrice: data.counterPrice,
     counterMessage: data.counterMessage,
@@ -212,8 +219,8 @@ async function assembleTeam(taskId, clientId, teamMembers) {
   let totalShare = 0;
 
   for (const member of teamMembers) {
-    if (typeof member.sharePercent !== 'number' || member.sharePercent <= 0 || member.sharePercent > 100) {
-      throw new AppError("Har bir a'zoning foizi 1 dan 100 gacha raqam bo'lishi kerak", 400);
+    if (typeof member.sharePercent !== 'number' || !Number.isInteger(member.sharePercent) || member.sharePercent <= 0 || member.sharePercent > 100) {
+      throw new AppError("Har bir a'zoning foizi 1 dan 100 gacha bo'lgan butun son bo'lishi kerak", 400);
     }
     totalShare += member.sharePercent;
 

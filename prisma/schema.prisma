@@ -172,6 +172,9 @@ model User {
   referredBy     String? @map("referred_by")
   referralEarned Float   @default(0) @map("referral_earned")
 
+  // ── Financial Balance ──
+  balance        Int     @default(0) @map("balance")
+
   // ── Notification preferences (Phase 14) ──
   notifPrefs Json    @default("{}") @map("notif_prefs")
   pushToken  String? @map("push_token")
