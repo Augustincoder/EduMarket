@@ -2,14 +2,13 @@ const { createClient } = require('redis');
 const logger = require('../utils/logger');
 const env = require('./env');
 
-// Using default redis connection locally (localhost:6379)
-// In production, configure REDIS_URL in .env
+const isTls = env.REDIS_URL && env.REDIS_URL.startsWith('rediss://');
 const redisOptions = env.REDIS_URL ? {
   url: env.REDIS_URL,
-  socket: {
-    tls: env.REDIS_URL.startsWith('rediss://'),
-    rejectUnauthorized: false // Helps with self-signed certs often used in managed DBs
-  }
+  socket: isTls ? {
+    tls: true,
+    rejectUnauthorized: false
+  } : undefined
 } : undefined;
 
 const pubClient = createClient(redisOptions);
